@@ -13,7 +13,7 @@ export StencilsnN
 
 # Defaultly set \Delta x = 1.0
 # Defaultly set 3/3 Stencils, for simplify LU decompositon
-function eval{n1, n2, n3}(
+function eval{n1}(
   pf :: PartialD_OP{PartialD{n1}, StencilsnN{3,3}, NaiveBoundary}, 
   data :: Array{Float64,1}; delta_x :: Float64 = 1.0
   )
@@ -23,7 +23,7 @@ function eval{n1, n2, n3}(
   return BackwardThomas(d,u, ForwardThomas(l,datax)) / ((delta_x)^(pf.pfunctor.n))
 end
 
-function eval{n1, n2, n3}(
+function eval{n1}(
   pf :: PartialD_OP{PartialD{n1}, StencilsnN{3,3}, NaivePeriodicShared}, 
   data_unshared :: Array{Float64,1}; delta_x :: Float64 = 1.0
   )
