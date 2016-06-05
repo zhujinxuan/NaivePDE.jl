@@ -1,4 +1,4 @@
-type Periodic_Boundaries{n} <: Boundary_Updator
+immutable Periodic_Boundaries{n} <: Boundary_Updator
   OL_bound :: NTuple{n, Int64}
   size :: NTuple{n, Int64}
   Periodic_Dims :: Tuple{Vararg{Int64}}
