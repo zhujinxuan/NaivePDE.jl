@@ -1,21 +1,26 @@
 include("KrylovSubspace.jl")
 
-type GMRES{n, T<:Number, TBoundary <: Boundary_Updator} <: GridMatrixIter_one
-  A :: Linear_Localized_Functor
+type GMRES{n, TNumber<:Number, TBoundary <: Boundary_Updator} <: GridMatrixSolver
+  A :: Linear_Localized_Functor{n, TNumber}
   OL_inner :: NTuple{n, Int64}
-  pArnoldi_iterator :: ArnoldiIterator{n,T, KrylovSubspace{n,T, Linear_Localized_Functor, TBoundary}}
-  function GMRES( A_1 :: Localized_Functor, OL_inner :: NTuple{n,Int64}, ytarget_expand :: Array{T,n}, PBoundary :: TBoundary , param ::Tuple{Vararg{Array{Float64,n}}}, global_param :: Tuple, maximum_order :: Int64)
-    OL_bound = PBoundary.OL_bound
+  pArnoldi_iterator :: ArnoldiIterator{n,TNumber, KrylovSubspace{n,TNumber, Linear_Localized_Functor, TBoundary}}
+  test_value_expand :: Array{TNumber,n}
+  function GMRES(
+    A_1 :: Localized_Functor, OL_inner :: NTuple{n,Int64}
+    , param ::Tuple{Vararg{Array{Float64,n}}}, global_param :: Tuple
+    , PBoundary :: TBoundary
+    , ytarget_expand :: Array{TNumber,n}
+    , maximum_order :: Int64)
 
-    ## A == 0, when inner cube exceeds the boundary
+    OL_bound = PBoundary.OL_bound
     A = Linear_Localized_Functor(OL_bound, OL_inner, A_1, size(ytarget_expand), param, global_param)
     Subspace = KrylovSubspace(A, ytarget_expand, PBoundary)
     pArnoldi_iterator = ArnoldiIterator(Subspace, maximum_order)
-    new(A, OL_inner, pArnoldi_iterator)
+    new(A, OL_inner, pArnoldi_iterator, ytarget_expand)
   end
 end
 
-function solve_expand!(p :: GMRES; iter_times :: Int64 = p.pArnoldi_iterator.maximum_order)
+function solve!(p :: GMRES, iter_times :: Int64 = p.pArnoldi_iterator.maximum_order)
   ## H H^T q = H b
   istep = p.pArnoldi_iterator.istep
   for ii = (istep+1):iter_times
@@ -43,6 +48,8 @@ function solve_expand!(p :: GMRES; iter_times :: Int64 = p.pArnoldi_iterator.max
 
   error_by_eigns = H*projx_s 
   error_by_eigns[1] -= b_norm
+  p.test_value_expand = value
+
 
   return (value,error_by_eigns)
 end
