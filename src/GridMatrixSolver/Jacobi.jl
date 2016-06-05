@@ -1,100 +1,52 @@
-function get_all_Ai{T<: Localized_Functor,n}(
-  OL :: Tuple{Vararg{Int64}}
-  ,p :: T
-  , x :: Array{Float64,n}
-  , param :: Tuple{Vararg{Array{Float64,n}}}
-  , global_param :: Tuple = ()
-  ; iseq :: Array{Int64,1} = Array(Int64,0)
-  , delta_x :: Float64 = 0.5
-  , OL_bound :: Tuple{Vararg{Int64}} = OL)
-
-  
-  irank = map((1:n...)) do ii
-    size(x,ii) - 2OL_bound[ii]
-  end
-
-  updatepoint_range = ( 0 == length(iseq)) ? collect(1:reduce(*,irank)) : iseq
-
-  Ai = fill(0.0,length(updatepoint_range))
-
-  for (ilogger, ipoint) = enumerate(updatepoint_range)
-    iixy = ind2sub(irank,ipoint)
-    iixyrange = map((1:n...)) do ii 
-      OL_bound[ii] + ((iixy[ii]-OL[ii]):(iixy[ii]+OL[ii]))
-    end
-
-    param_local = map(param) do xx
-      xx[iixyrange...]
-    end
-
-    xbackground = x[iixyrange...]
-    idx = map(x->x+1, OL)
-    
-
-    Ai[ilogger] = begin
-      x1background = fill(0.0,size(xbackground)); 
-      x1background[idx...] += delta_x
-      Ax1 = eval(p, x1background, param_local, idx, global_param)
-      x0background = fill(0.0,size(xbackground)); 
-      x0background[idx...] -= delta_x
-      Ax0 = eval(p, x0background, param_local, idx, global_param)
-      (Ax1 - Ax0)/(2delta_x)
-    end
-
-  end
-  return Ai
+type Jacobi_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator} <: GridMatrixSolver
+  A :: Linear_Localized_Functor{n, TNumber}
+  OL_inner :: NTuple{n, Int64}
+  PBoundary :: TBoundary
+  target :: Array{TNumber, n}
+  test_value_expand :: Array{TNumber,n}
+  istep :: Int64
 
 end
-export get_all_Ai
 
-type Jaccobi_onestep{T <: Localized_Functor} <: GridMatrixIter_one
-  A :: T
-  OL :: Tuple{Vararg{Int64}}
+function Jacobi_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator}(
+  A_1 :: Localized_Functor, OL_inner :: NTuple{n,Int64}
+  , param ::Tuple{Vararg{Array{Float64,n}}}, global_param :: Tuple
+  , PBoundary :: TBoundary
+  , ytarget_expand :: Array{TNumber,n}
+  ; test_initial :: Array{TNumber,n} = ytarget_expand
+  )
+  A = Linear_Localized_Functor(PBoundary, OL_inner, A_1, size(ytarget_expand), param, global_param, test_initial[1])
+  Jacobi_Solver(A, OL_inner, PBoundary, ytarget_expand, test_initial, 0) 
 end
 
-function eval!{T<: Localized_Functor,n}(
-  Ja :: Jaccobi_onestep{T}
-  , x :: Array{Float64,n}
-  , y :: Array{Float64,n}
-  , param :: Tuple{Vararg{Array{Float64,n}}}
-  , global_param :: Tuple = ()
-  ; alpha = 1.0, iseq :: Array{Int64,1} = Array(Int64,0)
-  , delta_x :: Float64 = 0.5)
+export Jacobi_Solver
 
-  OL = Ja.OL
-  irank = map((1:n...)) do ii
-    size(x,ii) - 2OL[ii]
+
+function solve(p :: Jacobi_Solver, iter_times :: Int64, alpha :: Float64 = 1.0)
+  for ii in (p.istep+1):iter_times
+    Forward!(p, alpha)
   end
-  change_x = fill(0.0,size(x))
 
-  Ais =  get_all_Ai(
-           Ja.OL, Ja.A, x, param, global_param; 
-           iseq = iseq, delta_x = delta_x, OL_bound = Ja.OL
-           )
-  updatepoint_range = ( 0 == length(iseq)) ? collect(1:reduce(*,irank)) : iseq
-  for (ilogger, ipoint) = enumerate(updatepoint_range)
-    iixy = ind2sub(irank,ipoint)
-    iixyrange = map((1:n...)) do ii 
-      OL[ii] + ((iixy[ii]-OL[ii]):(iixy[ii]+OL[ii]))
-    end
-
-    param_local = map(param) do xx
-      xx[iixyrange...]
-    end
-
-    xbackground = x[iixyrange...]
-    idx = map(x->x+1, OL)
-
-    Ax = eval(Ja.A, xbackground, param_local, idx, global_param)
-    Ai = Ais[ilogger]
-
-    y_localerror = y[ipoint] - Ax
-
-    xbackground_idx = map(ii -> OL[ii] + iixy[ii], (1:n...))
-    change_x[xbackground_idx...] += alpha*y_localerror / Ai
-  end
-  x[:] =  x+change_x
-  return x
 end
 
-export Jaccobi_onestep
+function Forward!(p :: Jacobi_Solver, alpha :: Float64)
+  p.istep +=1
+  istep = p.istep
+  PBoundary = p.PBoundary
+  OL_bound = PBoundary.OL_bound
+  (OL_bound_start, OL_bound_end) =  Boundary_Start_End_subs(PBoundary)
+  test_value = p.test_value_expand
+  changes_x = zeros(test_value)
+
+  for Cartesian_Inner_Idx in CartesianRange(CartesianIndex(OL_bound_start), CartesianIndex(OL_bound_end))
+    idx = Cartesian_Inner_Idx.I
+    Ax = eval(p.A, test_value, (), idx, ())
+    Ai_c = get_Ai_center(p.A, idx)
+    ytarget = p.target[Cartesian_Inner_Idx]
+    changes_x[Cartesian_Inner_Idx] = alpha * (ytarget-Ax)/Ai_c 
+  end
+
+  p.test_value_expand += changes_x
+
+  Update_Boundaries!(PBoundary, p.test_value_expand)
+end

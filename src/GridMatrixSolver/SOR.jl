@@ -1,51 +1,71 @@
-type SOR_onestep{T <: Localized_Functor} <: GridMatrixIter_one
-  A :: T
-  OL :: Tuple{Vararg{Int64}}
+type SOR_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator} <: GridMatrixSolver
+  A :: Linear_Localized_Functor{n, TNumber}
+  OL_inner :: NTuple{n, Int64}
+  PBoundary :: TBoundary
+  target :: Array{TNumber, n}
+  test_value_expand :: Array{TNumber,n}
+  istep :: Int64
 end
 
-function eval!{T<:Localized_Functor,n}(
-  Ja :: SOR_onestep{T}
-  , x :: Array{Float64,n}
-  , y :: Array{Float64,n}
-  , param :: Tuple{Vararg{Array{Float64,n}}}
-  , global_param :: Tuple = ()
-  ; alpha = 1.0, iseq :: Array{Int64,1} = Array(Int64,0)
-  , delta_x :: Float64 = 0.5)
-
-  OL = Ja.OL
-  irank = map((1:n...)) do ii
-    size(x,ii) - 2OL[ii]
-  end
-
-  Ais =  get_all_Ai(
-           Ja.OL, Ja.A, x, param, global_param; 
-           iseq = iseq, delta_x = delta_x, OL_bound = Ja.OL
-           )
-
-
-  updatepoint_range = ( 0 == length(iseq)) ? collect(1:reduce(*,irank)) : iseq
-  for (ilogger,ipoint) = enumerate(updatepoint_range)
-    iixy = ind2sub(irank,ipoint)
-
-    iixyrange = map((1:n...)) do ii 
-      OL[ii]+ ((iixy[ii]-OL[ii]):(iixy[ii]+OL[ii]))
-    end
-
-    param_local = map(param) do xx
-      xx[iixyrange...]
-    end
-
-    xbackground = x[iixyrange...]
-    idx = map(x->x+1, OL)
-
-    Ax = eval(Ja.A, xbackground, param_local, idx, global_param)
-    Ai = Ais[ilogger]
-
-    y_localerror = y[map(ii -> OL[ii]+iixy[ii], (1:n...))... ] - Ax
-    xbackground_idx = map(ii -> OL[ii] + iixy[ii], (1:n...))
-    x[xbackground_idx...] += alpha*y_localerror / (Ai+ 0)
-  end
-  return x
+function SOR_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator}(
+  A_1 :: Localized_Functor, OL_inner :: NTuple{n,Int64}
+  , param ::Tuple{Vararg{Array{Float64,n}}}, global_param :: Tuple
+  , PBoundary :: TBoundary
+  , ytarget_expand :: Array{TNumber,n}
+  ; test_initial :: Array{TNumber,n} = ytarget_expand
+  )
+  A = Linear_Localized_Functor(PBoundary, OL_inner, A_1, size(ytarget_expand), param, global_param, test_initial[1])
+  SOR_Solver(A, OL_inner, PBoundary, ytarget_expand, test_initial, 0) 
 end
 
-include("SOR.jl")
+export SOR_Solver
+
+
+function solve(p :: SOR_Solver, iter_times :: Int64, alpha :: Float64 = 1.0)
+  for ii in (p.istep+1):iter_times
+    Forward!(p, alpha)
+  end
+end
+
+function Forward!(p :: SOR_Solver, alpha :: Float64)
+  p.istep +=1
+  istep = p.istep
+  PBoundary = p.PBoundary
+  OL_bound = PBoundary.OL_bound
+  (OL_bound_start, OL_bound_end) =  Boundary_Start_End_subs(PBoundary)
+  test_value = p.test_value_expand
+  for Cartesianrr_sliced in slice_an_range(CartesianRange(CartesianIndex(OL_bound_start), CartesianIndex(OL_bound_end)))
+    for Cartesian_Inner_Idx in Cartesianrr_sliced
+      idx = Cartesian_Inner_Idx.I
+      Ax = eval(p.A, test_value, (), idx, ())
+      Ai_c = get_Ai_center(p.A, idx)
+      ytarget = p.target[Cartesian_Inner_Idx]
+      p.test_value_expand[Cartesian_Inner_Idx] += alpha * (ytarget-Ax)/Ai_c 
+    end
+    Update_Boundaries!(PBoundary, p.test_value_expand)
+  end
+end
+
+export SOR_Solver
+
+function slice_an_range{n}( OL_range :: CartesianRange{CartesianIndex{n}})
+  bound_start = OL_range.start.I
+  bound_stop = OL_range.stop.I
+  mid_subs = list_eval(bound_start, bound_stop) do x1,x2
+    round(Int64, (x1 + x2)/2)
+  end
+  
+  res = Array{CartesianRange{CartesianIndex{n}}}(map(v->2, (1:n...)))
+
+  for Carteidx in CartesianRange(size(res))
+    res_start= map((1:n...)) do ii
+      (1==Carteidx[ii] ) ? bound_start[ii] : (mid_subs[ii]+1)
+    end
+    res_stop = map((1:n...)) do ii
+      (1==Carteidx[ii] ) ? mid_subs[ii] : (bound_stop[ii])
+    end
+    
+    res[Carteidx] = CartesianRange(CartesianIndex(res_start), CartesianIndex(res_stop))
+  end
+  return collect(res)
+end
