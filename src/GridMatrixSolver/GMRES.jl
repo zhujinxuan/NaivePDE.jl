@@ -1,6 +1,6 @@
 include("KrylovSubspace.jl")
 
-type GMRES{n, TNumber<:Number, TBoundary <: Boundary_Updator} <: GridMatrixSolver
+type GMRES{n, TNumber<:Number, TBoundary <: Boundary_Updator{n}} <: GridMatrixSolver
   A :: Linear_Localized_Functor{n, TNumber}
   OL_inner :: NTuple{n, Int64}
   pArnoldi_iterator :: ArnoldiIterator{n,TNumber, KrylovSubspace{n,TNumber, Linear_Localized_Functor, TBoundary}}

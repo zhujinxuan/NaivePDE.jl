@@ -1,18 +1,46 @@
-abstract Boundary_Updator
+abstract Boundary_Updator{n}
 
 function Update_Boundaries!{n, TFloat <: Number}(
-  pbound :: Boundary_Updator, data :: Array{TFloat, n})
+  pbound :: Boundary_Updator{n}, data :: Array{TFloat, n})
   error("No Methods for an undefined type")
 end
 
 function GetCore{n, TFloat <: Number}(
-  pbound :: Boundary_Updator, data :: Array{TFloat, n})
+  pbound :: Boundary_Updator{n}, data :: Array{TFloat, n})
   error("No Function for abstract types")
 end
 
+CoreSize{n}(pbound :: Boundary_Updator{n}) = list_eval(-,pbound.size, map(x->2x, pbound.OL_bound))
+
+ExpandSize{n}(pbound :: Boundary_Updator{n}) = pbound.size
+
+function GetCore{n, TFloat <: Number}(
+  pbound :: Periodic_Boundaries{n}, data :: Array{TFloat, n})
+  @assert size(data) == ExpandSize(pbound)
+  OL_bound = pbound.OL_bound
+  core_subs = map( (1:ndims(data)...)) do ii
+    bound_length = OL_bound[ii]
+    core_length = size(data,ii) - 2bound_length
+    (bound_length + (1:core_length))
+  end
+  return data[core_subs...]
+end
+export GetCore
+
 function Expand{n, TFloat <: Number}(
-  pbound :: Boundary_Updator, data :: Array{TFloat, n})
-  error("No Function for abstract types")
+  pbound :: Boundary_Updator{n}, data :: Array{TFloat, n};
+  initial_by_ :: Function = zeros)
+  @assert size(data) == CoreSize(pbound)
+
+  OL_bound = pbound.OL_bound
+  data_expand = initial_by_(TFloat, pbound.size)
+
+  left_register = list_eval(size(data),OL_bound) do core_length, bound_length
+    (bound_length+1):(core_length+bound_length)
+  end
+  data_expand[left_register...] = data
+  Update_Boundaries!(pbound, data_expand)
+  return data_expand
 end
 
 function Boundary_Start_End_subs(pbound :: Boundary_Updator)

@@ -1,4 +1,4 @@
-immutable Periodic_Boundaries{n} <: Boundary_Updator
+immutable Periodic_Boundaries{n} <: Boundary_Updator{n}
   OL_bound :: NTuple{n, Int64}
   size :: NTuple{n, Int64}
   Periodic_Dims :: Tuple{Vararg{Int64}}
@@ -53,30 +53,4 @@ end
 export Update_Boundaries!
 
 
-function GetCore{n, TFloat <: Number}(
-  pbound :: Periodic_Boundaries{n}, data :: Array{TFloat, n})
-  @assert size(data) == pbound.size
-  core_subs = map( (1:ndims(data)...)) do ii
-    bound_length = OL_bound[ii]
-    core_length = size(data,ii) - 2bound_length
-    (bound_length + (1:core_length))
-  end
-  return data[core_subs...]
-end
 
-function Expand{n, TFloat <: Number}(
-  pbound :: Periodic_Boundaries{n}, data :: Array{TFloat, n})
-  @assert size(data) == list_eval(-,pbound.size, map(x->2x, pbound.OL_bound))
-
-  OL_bound = pbound.OL_bound
-  data_expand = zeros(TFloat, pbound.size)
-
-  left_register = list_eval(size(data),OL_bound) do core_length, bound_length
-    (bound_length+1):(core_length+bound_length)
-  end
-  data_expand[left_register...] = data
-  Update_Boundaries!(pbound, data_expand)
-  return data_expand
-end
-
-export Expand

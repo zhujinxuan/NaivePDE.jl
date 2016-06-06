@@ -1,4 +1,4 @@
-type SOR_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator} <: GridMatrixSolver
+type SOR_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator{n}} <: GridMatrixSolver
   A :: Linear_Localized_Functor{n, TNumber}
   OL_inner :: NTuple{n, Int64}
   PBoundary :: TBoundary
