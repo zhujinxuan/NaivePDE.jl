@@ -2,14 +2,9 @@ immutable Periodic_Boundaries{n} <: Boundary_Updator{n}
   OL_bound :: NTuple{n, Int64}
   size :: NTuple{n, Int64}
   Periodic_Dims :: Tuple{Vararg{Int64}}
-  #= function Periodic_Boundaries{n}(OL_bound :: NTuple{n, Int64}, size :: NTuple{n, Int64},  Periodic_Dims :: Tuple{Vararg{Int64}} =# 
-    #= new(OL_bound, size, Periodic_Dims) =#
-  #= end =#
 end
-Periodic_Boundaries{n}(OL_bound :: NTuple{n,Int64}, size :: NTuple{n,Int64}, Periodic_Dims :: Tuple{Vararg{Int64}} = (1:n...)) = Periodic_Boundaries{n}(OL_bound, size, Periodic_Dims)
+Periodic_Boundaries{n}(OL_bound :: NTuple{n, Int64}, expandsize :: NTuple{n, Int64} ) = Periodic_Boundaries(OL_bound, expandsize, (1:n...))
 export Periodic_Boundaries
-
-
 
 function Update_Boundaries!{n, TFloat <: Number}(
   pbound :: Periodic_Boundaries{n}, data :: Array{TFloat, n})
@@ -49,8 +44,5 @@ function Update_Boundaries!{n, TFloat <: Number}(
   end
   return data
 end
-
 export Update_Boundaries!
-
-
 
