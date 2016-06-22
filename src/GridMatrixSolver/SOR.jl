@@ -1,4 +1,4 @@
-type SOR_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator{n}} <: GridMatrixSolver
+type SOR_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator} <: GridMatrixSolver
   A :: Linear_Localized_Functor{n, TNumber}
   OL_inner :: NTuple{n, Int64}
   PBoundary :: TBoundary
@@ -21,7 +21,7 @@ end
 export SOR_Solver
 
 
-function solve(p :: SOR_Solver, iter_times :: Int64, alpha :: Float64 = 1.0)
+function solve!(p :: SOR_Solver, iter_times :: Int64, alpha :: Float64 = 1.0)
   for ii in (p.istep+1):iter_times
     Forward!(p, alpha)
   end

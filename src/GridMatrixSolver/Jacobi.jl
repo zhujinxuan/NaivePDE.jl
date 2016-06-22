@@ -1,11 +1,10 @@
-type Jacobi_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator{n}} <: GridMatrixSolver
+type Jacobi_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator} <: GridMatrixSolver
   A :: Linear_Localized_Functor{n, TNumber}
   OL_inner :: NTuple{n, Int64}
   PBoundary :: TBoundary
   target :: Array{TNumber, n}
   test_value_expand :: Array{TNumber,n}
   istep :: Int64
-
 end
 
 function Jacobi_Solver{n, TNumber <: Number, TBoundary <: Boundary_Updator}(
@@ -22,7 +21,7 @@ end
 export Jacobi_Solver
 
 
-function solve(p :: Jacobi_Solver, iter_times :: Int64, alpha :: Float64 = 1.0)
+function solve!(p :: Jacobi_Solver, iter_times :: Int64, alpha :: Float64 = 1.0)
   for ii in (p.istep+1):iter_times
     Forward!(p, alpha)
   end
